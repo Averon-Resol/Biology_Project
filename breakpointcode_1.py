@@ -4,79 +4,70 @@ import random
 import networkx as nx
 import matplotlib.pyplot as plt
 
-current_folder = os.getcwd()
-gtf_filename = "gencode.v47.basic.annotation.gtf"
-gtf_file = os.path.join(current_folder, gtf_filename)
+def load_genome_from_file(filepath):
+    """
+    Load a genome from a text file containing space-separated gene numbers
+    """
+    try:
+        with open(filepath, 'r') as f:
+            genome_text = f.read().strip()
+            genome = [int(x) for x in genome_text.split()]
+        return genome
+    except Exception as e:
+        print(f"Error loading genome from {filepath}: {e}")
+        return None
 
-genes = []
-
-with open(gtf_file, 'r') as file:
-    for line in file:
-        if line.startswith("#"):
-            continue
-        fields = line.strip().split('\t')
-        
-        if len(fields) < 9:
-            continue
-        
-        feature_type = fields[2]
-        
-        if feature_type == 'gene':
-            chrom = fields[0]
-            start = int(fields[3])
-            end = int(fields[4])
-            strand = fields[6]
-            attributes = fields[8]
+def parse_gtf_file(gtf_file):
+    """
+    Parse a GTF file and return a list of signed genome elements
+    """
+    genes = []
+    
+    with open(gtf_file, 'r') as file:
+        for line in file:
+            if line.startswith("#"):
+                continue
+            fields = line.strip().split('\t')
             
-            gene_id = None
-            for entry in attributes.split(";"):
-                if "gene_id" in entry:
-                    gene_id = entry.strip().split(' ')[1].replace('"','')
-                    break
+            if len(fields) < 9:
+                continue
             
-            if gene_id:
-                genes.append((chrom, start, strand, gene_id))
-
-df = pd.DataFrame(genes, columns=['chrom', 'start', 'strand', 'gene_id'])
-df = df.sort_values(by=['chrom', 'start'])
-gene_to_num = {gene: idx+1 for idx, gene in enumerate(df['gene_id'])}
-
-genome1 = []
-for idx, row in df.iterrows():
-    gene_num = gene_to_num[row['gene_id']]
-    if row['strand'] == '+':
-        genome1.append(gene_num)
-    else:
-        genome1.append(-gene_num)
-
-print("\n✅ Signed Genome1 (first 100 genes):")
-print(genome1[:100])
-
-with open('signed_genome1_list.txt', 'w') as f:
-    f.write(' '.join(map(str, genome1)))
-
-print("\nSigned Genome1 saved as 'signed_genome1_list.txt'.")
-
-genome2 = genome1.copy()
-
-# Create a LARGER mutation to make differences more visible
-start = random.randint(0, len(genome2) - 50)  # Start point
-end = start + random.randint(20, 30)          # Length of 20 to 30 genes
-
-# Invert the region
-genome2[start:end] = [-x for x in reversed(genome2[start:end])]
-
-print(f"\n✅ Simulated Mutation: Inverted genes from index {start} to {end-1}.")
-
-print("\n✅ Signed Genome2 (first 100 genes):")
-print(genome2[:100])
-
-with open('signed_genome2_list.txt', 'w') as f:
-    f.write(' '.join(map(str, genome2)))
-
-print("\nSigned Genome2 saved as 'signed_genome2_list.txt'.")
+            feature_type = fields[2]
+            
+            if feature_type == 'gene':
+                chrom = fields[0]
+                start = int(fields[3])
+                end = int(fields[4])
+                strand = fields[6]
+                attributes = fields[8]
+                
+                gene_id = None
+                for entry in attributes.split(";"):
+                    if "gene_id" in entry:
+                        gene_id = entry.strip().split(' ')[1].replace('"','')
+                        break
+                
+                if gene_id:
+                    genes.append((chrom, start, strand, gene_id))
+    
+    df = pd.DataFrame(genes, columns=['chrom', 'start', 'strand', 'gene_id'])
+    df = df.sort_values(by=['chrom', 'start'])
+    gene_to_num = {gene: idx+1 for idx, gene in enumerate(df['gene_id'])}
+    
+    genome = []
+    for idx, row in df.iterrows():
+        gene_num = gene_to_num[row['gene_id']]
+        if row['strand'] == '+':
+            genome.append(gene_num)
+        else:
+            genome.append(-gene_num)
+    
+    return genome
 
 def count_breakpoints(genome1, genome2):
+    """
+    Count the number of breakpoints between two genomes
+    """
     adj1 = set((genome1[i], genome1[i+1]) for i in range(len(genome1)-1))
     adj2 = set((genome2[i], genome2[i+1]) for i in range(len(genome2)-1))
     
@@ -85,6 +76,9 @@ def count_breakpoints(genome1, genome2):
     return len(breakpoints)
 
 def find_breakpoints(genome1, genome2):
+    """
+    Find and list the breakpoints between two genomes
+    """
     adj1 = set((genome1[i], genome1[i+1]) for i in range(len(genome1)-1))
     adj2 = set((genome2[i], genome2[i+1]) for i in range(len(genome2)-1))
     
@@ -94,18 +88,30 @@ def find_breakpoints(genome1, genome2):
     print("Breakpoints (gene pairs that are broken):")
     for b in breakpoints:
         print(b)
+    
+    return breakpoints
 
-find_breakpoints(genome1, genome2)
-
-# Focus on the area around the mutation for better visualization
-buffer = 20  # Add some genes before and after mutation
-vis_start = max(0, start - buffer)
-vis_end = min(len(genome1), end + buffer)
-
-small_genome1 = genome1[vis_start:vis_end]
-small_genome2 = genome2[vis_start:vis_end]
+def simulate_inversion(genome1):
+    """
+    Create a new genome by simulating an inversion mutation
+    """
+    genome2 = genome1.copy()
+    
+    # Create a mutation
+    start = random.randint(0, len(genome2) - 50)  # Start point
+    end = start + random.randint(20, 30)          # Length of 20 to 30 genes
+    
+    # Invert the region
+    genome2[start:end] = [-x for x in reversed(genome2[start:end])]
+    
+    print(f"\n✅ Simulated Mutation: Inverted genes from index {start} to {end-1}.")
+    
+    return genome2, start, end
 
 def verify_mutation(genome1, genome2, start_index, end_index):
+    """
+    Verify that a mutation was correctly applied
+    """
     print("\n=== MUTATION VERIFICATION ===")
     print(f"Original segment in genome1: {genome1[start_index:end_index]}")
     print(f"Inverted segment in genome2: {genome2[start_index:end_index]}")
@@ -121,9 +127,6 @@ def verify_mutation(genome1, genome2, start_index, end_index):
         print(f"Expected: {should_be}")
         print(f"Actual:   {actual}")
     
-    before_mutation = genome1[start_index-1] if start_index > 0 else None
-    after_mutation = genome1[end_index] if end_index < len(genome1) else None
-    
     print("\nBreakpoints created by mutation:")
     if start_index > 0:
         print(f"Before inversion: {genome1[start_index-1]} -> {genome1[start_index]}")
@@ -133,17 +136,51 @@ def verify_mutation(genome1, genome2, start_index, end_index):
         print(f"Before inversion: {genome1[end_index-1]} -> {genome1[end_index]}")
         print(f"After inversion:  {genome2[end_index-1]} -> {genome2[end_index]}")
 
-# Verify the mutation first
-verify_mutation(genome1, genome2, start, end)
-
-def draw_breakpoint_graph(small_genome1, small_genome2):
+def draw_breakpoint_graph(genome1, genome2, focus_region=None):
+    """
+    Draw the breakpoint graph between two genomes
+    
+    Parameters:
+    - genome1, genome2: The two genomes to compare
+    - focus_region: Optional tuple (start, end) to focus on a specific region
+    """
+    # If focus_region is provided, use it to limit the genomes
+    if focus_region:
+        start, end = focus_region
+        small_genome1 = genome1[start:end]
+        small_genome2 = genome2[start:end]
+    else:
+        # Default: use first 200 genes or center on mutation if detected
+        if len(genome1) > 400:
+            # Try to find mutation region by checking for differences
+            diff_indices = []
+            for i in range(min(len(genome1), len(genome2))):
+                if genome1[i] != genome2[i]:
+                    diff_indices.append(i)
+            
+            if diff_indices:
+                # Center on differences
+                center = sum(diff_indices) // len(diff_indices)
+                start = max(0, center - 50)
+                end = min(len(genome1), center + 50)
+                small_genome1 = genome1[start:end]
+                small_genome2 = genome2[start:end]
+            else:
+                # No differences found, use first 200
+                small_genome1 = genome1[:200]
+                small_genome2 = genome2[:200]
+        else:
+            # Genomes are small enough to show whole
+            small_genome1 = genome1
+            small_genome2 = genome2
+    
     G = nx.Graph()
     
-    # Create directed adjacencies with tuple order preserved (important!)
+    # Create directed adjacencies
     adj1 = [(small_genome1[i], small_genome1[i+1]) for i in range(len(small_genome1)-1)]
     adj2 = [(small_genome2[i], small_genome2[i+1]) for i in range(len(small_genome2)-1)]
     
-    # Store as strings to preserve direction (crucial fix)
+    # Store as strings to preserve direction
     adj1_str = set(f"{u}->{v}" for u, v in adj1)
     adj2_str = set(f"{u}->{v}" for u, v in adj2)
     
@@ -208,5 +245,74 @@ def draw_breakpoint_graph(small_genome1, small_genome2):
     plt.savefig('breakpoint_graph.png')
     plt.show()
 
-# Draw the graph AFTER verifying
-draw_breakpoint_graph(small_genome1, small_genome2)
+def main():
+    # Get current working folder
+    current_folder = os.getcwd()
+    
+    # Process command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Compare genomes and generate breakpoint graphs')
+    parser.add_argument('--gtf', type=str, default="gencode.v47.basic.annotation.gtf", 
+                        help='GTF file to parse (default: gencode.v47.basic.annotation.gtf)')
+    parser.add_argument('--genome2', type=str, default=None, 
+                        help='Path to file containing second genome (optional)')
+    args = parser.parse_args()
+    
+    gtf_file = os.path.join(current_folder, args.gtf)
+    
+    print(f"Parsing GTF file: {gtf_file}")
+    genome1 = parse_gtf_file(gtf_file)
+    
+    print("\n✅ Signed Genome1 (first 100 genes):")
+    print(genome1[:100])
+    
+    # Save Genome1 to file
+    with open('signed_genome1_list.txt', 'w') as f:
+        f.write(' '.join(map(str, genome1)))
+    
+    print("\nSigned Genome1 saved as 'signed_genome1_list.txt'.")
+    
+    # Either load genome2 from file or simulate it
+    if args.genome2 and os.path.exists(args.genome2):
+        print(f"\nLoading Genome2 from file: {args.genome2}")
+        genome2 = load_genome_from_file(args.genome2)
+        
+        if genome2:
+            print("\n✅ Signed Genome2 (first 100 genes):")
+            print(genome2[:100])
+            
+            # Compare genomes
+            find_breakpoints(genome1, genome2)
+            
+            # Draw breakpoint graph
+            draw_breakpoint_graph(genome1, genome2)
+        else:
+            print("Failed to load genome2. Exiting.")
+            return
+    else:
+        # Simulate a mutation
+        genome2, start, end = simulate_inversion(genome1)
+        
+        print("\n✅ Signed Genome2 (first 100 genes):")
+        print(genome2[:100])
+        
+        # Save Genome2 to file
+        with open('signed_genome2_list.txt', 'w') as f:
+            f.write(' '.join(map(str, genome2)))
+        
+        print("\nSigned Genome2 saved as 'signed_genome2_list.txt'.")
+        
+        # Verify the mutation
+        verify_mutation(genome1, genome2, start, end)
+        
+        # Find breakpoints
+        find_breakpoints(genome1, genome2)
+        
+        # Draw breakpoint graph with focus on mutation region
+        buffer = 20
+        vis_start = max(0, start - buffer)
+        vis_end = min(len(genome1), end + buffer)
+        draw_breakpoint_graph(genome1, genome2, (vis_start, vis_end))
+
+if __name__ == "__main__":
+    main()
