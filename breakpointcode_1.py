@@ -4,20 +4,12 @@ import random
 import networkx as nx
 import matplotlib.pyplot as plt
 
-# =========================
-# Step 1: Read GTF and Build Genome1
-# =========================
-
-# Get current working folder
 current_folder = os.getcwd()
-
-# GTF filename (keep GTF file and script in same folder)
-gtf_filename = "gencode.v47.basic.annotation.gtf"   # Change if needed
+gtf_filename = "gencode.v47.basic.annotation.gtf"
 gtf_file = os.path.join(current_folder, gtf_filename)
 
 genes = []
 
-# Read GTF file line by line
 with open(gtf_file, 'r') as file:
     for line in file:
         if line.startswith("#"):
@@ -45,19 +37,10 @@ with open(gtf_file, 'r') as file:
             if gene_id:
                 genes.append((chrom, start, strand, gene_id))
 
-# Build DataFrame
 df = pd.DataFrame(genes, columns=['chrom', 'start', 'strand', 'gene_id'])
-
-# Optional: filter to 1 chromosome for small test
-# df = df[df['chrom'] == 'chr1']
-
-# Sort by chromosome and start
 df = df.sort_values(by=['chrom', 'start'])
-
-# Assign number to each gene
 gene_to_num = {gene: idx+1 for idx, gene in enumerate(df['gene_id'])}
 
-# Build signed genome1
 genome1 = []
 for idx, row in df.iterrows():
     gene_num = gene_to_num[row['gene_id']]
@@ -69,22 +52,16 @@ for idx, row in df.iterrows():
 print("\n✅ Signed Genome1 (first 100 genes):")
 print(genome1[:100])
 
-# Save Genome1 to file
 with open('signed_genome1_list.txt', 'w') as f:
     f.write(' '.join(map(str, genome1)))
 
 print("\nSigned Genome1 saved as 'signed_genome1_list.txt'.")
 
-# =========================
-# Step 2: Simulate Mutation to Create Genome2
-# =========================
-
-# Copy genome1
 genome2 = genome1.copy()
 
-# Pick a random region to invert
-start = random.randint(0, len(genome2) - 20)  # Start point
-end = start + random.randint(5, 10)            # Length of 5 to 10 genes
+# Create a LARGER mutation to make differences more visible
+start = random.randint(0, len(genome2) - 50)  # Start point
+end = start + random.randint(20, 30)          # Length of 20 to 30 genes
 
 # Invert the region
 genome2[start:end] = [-x for x in reversed(genome2[start:end])]
@@ -94,35 +71,20 @@ print(f"\n✅ Simulated Mutation: Inverted genes from index {start} to {end-1}."
 print("\n✅ Signed Genome2 (first 100 genes):")
 print(genome2[:100])
 
-# Save Genome2 to file
 with open('signed_genome2_list.txt', 'w') as f:
     f.write(' '.join(map(str, genome2)))
 
 print("\nSigned Genome2 saved as 'signed_genome2_list.txt'.")
 
-# =========================
-# Step 3: Compare Genomes and Count Breakpoints
-# =========================
-
 def count_breakpoints(genome1, genome2):
-    """
-    Count the number of breakpoints between two genomes
-    based on adjacent gene pairs.
-    """
-    # Build adjacency sets
     adj1 = set((genome1[i], genome1[i+1]) for i in range(len(genome1)-1))
     adj2 = set((genome2[i], genome2[i+1]) for i in range(len(genome2)-1))
     
-    # Breakpoints = places where adjacencies differ
     breakpoints = adj1.symmetric_difference(adj2)
     
     return len(breakpoints)
 
 def find_breakpoints(genome1, genome2):
-    """
-    Find and list the breakpoints between two genomes
-    based on adjacency differences.
-    """
     adj1 = set((genome1[i], genome1[i+1]) for i in range(len(genome1)-1))
     adj2 = set((genome2[i], genome2[i+1]) for i in range(len(genome2)-1))
     
@@ -133,34 +95,68 @@ def find_breakpoints(genome1, genome2):
     for b in breakpoints:
         print(b)
 
-# Call to find and display breakpoints
 find_breakpoints(genome1, genome2)
 
-# Just before draw
-small_genome1 = genome1[:200]
-small_genome2 = genome2[:200]
+# Focus on the area around the mutation for better visualization
+buffer = 20  # Add some genes before and after mutation
+vis_start = max(0, start - buffer)
+vis_end = min(len(genome1), end + buffer)
 
+small_genome1 = genome1[vis_start:vis_end]
+small_genome2 = genome2[vis_start:vis_end]
+
+def verify_mutation(genome1, genome2, start_index, end_index):
+    print("\n=== MUTATION VERIFICATION ===")
+    print(f"Original segment in genome1: {genome1[start_index:end_index]}")
+    print(f"Inverted segment in genome2: {genome2[start_index:end_index]}")
+    
+    original = genome1[start_index:end_index]
+    should_be = [-x for x in reversed(original)]
+    actual = genome2[start_index:end_index]
+    
+    if should_be == actual:
+        print("✅ Mutation correctly applied!")
+    else:
+        print("❌ Mutation NOT correctly applied!")
+        print(f"Expected: {should_be}")
+        print(f"Actual:   {actual}")
+    
+    before_mutation = genome1[start_index-1] if start_index > 0 else None
+    after_mutation = genome1[end_index] if end_index < len(genome1) else None
+    
+    print("\nBreakpoints created by mutation:")
+    if start_index > 0:
+        print(f"Before inversion: {genome1[start_index-1]} -> {genome1[start_index]}")
+        print(f"After inversion:  {genome2[start_index-1]} -> {genome2[start_index]}")
+    
+    if end_index < len(genome1):
+        print(f"Before inversion: {genome1[end_index-1]} -> {genome1[end_index]}")
+        print(f"After inversion:  {genome2[end_index-1]} -> {genome2[end_index]}")
+
+# Verify the mutation first
+verify_mutation(genome1, genome2, start, end)
 
 def draw_breakpoint_graph(small_genome1, small_genome2):
-    """
-    Draw the breakpoint graph between two genomes with clearer distinction.
-    """
     G = nx.Graph()
     
-    # Create directed adjacencies (order matters)
+    # Create directed adjacencies with tuple order preserved (important!)
     adj1 = [(small_genome1[i], small_genome1[i+1]) for i in range(len(small_genome1)-1)]
     adj2 = [(small_genome2[i], small_genome2[i+1]) for i in range(len(small_genome2)-1)]
     
-    # Convert to hashable frozensets for comparison (ignoring direction)
-    adj1_set = {frozenset([u, v]) for u, v in adj1}
-    adj2_set = {frozenset([u, v]) for u, v in adj2}
+    # Store as strings to preserve direction (crucial fix)
+    adj1_str = set(f"{u}->{v}" for u, v in adj1)
+    adj2_str = set(f"{u}->{v}" for u, v in adj2)
     
     # Calculate unique edges
-    only_in_genome1 = adj1_set - adj2_set
-    only_in_genome2 = adj2_set - adj1_set
-    in_both = adj1_set & adj2_set
+    only_in_genome1 = adj1_str - adj2_str
+    only_in_genome2 = adj2_str - adj1_str
+    in_both = adj1_str & adj2_str
     
-    # Add nodes first (to ensure all nodes are included)
+    # Create a mapping from string representation back to tuples
+    edges1 = {f"{u}->{v}": (u, v) for u, v in adj1}
+    edges2 = {f"{u}->{v}": (u, v) for u, v in adj2}
+    
+    # Add all nodes
     all_nodes = set()
     for u, v in adj1 + adj2:
         all_nodes.add(u)
@@ -170,24 +166,22 @@ def draw_breakpoint_graph(small_genome1, small_genome2):
         G.add_node(node)
     
     # Add edges with appropriate colors
-    for u, v in adj1:
-        edge_set = frozenset([u, v])
-        if edge_set in only_in_genome1:
-            G.add_edge(u, v, color='red')
+    for edge_str in only_in_genome1:
+        u, v = edges1[edge_str]
+        G.add_edge(u, v, color='red')
     
-    for u, v in adj2:
-        edge_set = frozenset([u, v])
-        if edge_set in only_in_genome2:
-            G.add_edge(u, v, color='blue')
+    for edge_str in only_in_genome2:
+        u, v = edges2[edge_str]
+        G.add_edge(u, v, color='blue')
     
-    for edge_set in in_both:
-        u, v = tuple(edge_set)
+    for edge_str in in_both:
+        u, v = edges1[edge_str] if edge_str in edges1 else edges2[edge_str]
         G.add_edge(u, v, color='purple')
     
     # Get edge colors for drawing
     colors = [G[u][v]['color'] for u, v in G.edges()]
     
-    # Print some debugging info
+    # Print debugging info
     print(f"Total nodes: {len(G.nodes())}")
     print(f"Total edges: {len(G.edges())}")
     print(f"Red edges (genome1 only): {colors.count('red')}")
@@ -214,45 +208,5 @@ def draw_breakpoint_graph(small_genome1, small_genome2):
     plt.savefig('breakpoint_graph.png')
     plt.show()
 
-# Let's also add a function to verify the mutation in genome2
-def verify_mutation(genome1, genome2, start_index, end_index):
-    """
-    Verify that the mutation was correctly applied
-    """
-    print("\n=== MUTATION VERIFICATION ===")
-    print(f"Original segment in genome1: {genome1[start_index:end_index]}")
-    print(f"Inverted segment in genome2: {genome2[start_index:end_index]}")
-    
-    # Check if it's correctly inverted
-    original = genome1[start_index:end_index]
-    should_be = [-x for x in reversed(original)]
-    actual = genome2[start_index:end_index]
-    
-    if should_be == actual:
-        print("✅ Mutation correctly applied!")
-    else:
-        print("❌ Mutation NOT correctly applied!")
-        print(f"Expected: {should_be}")
-        print(f"Actual:   {actual}")
-    
-    # Check for changed adjacencies
-    before_mutation = genome1[start_index-1] if start_index > 0 else None
-    after_mutation = genome1[end_index] if end_index < len(genome1) else None
-    
-    print("\nBreakpoints created by mutation:")
-    if start_index > 0:
-        print(f"Before inversion: {genome1[start_index-1]} -> {genome1[start_index]}")
-        print(f"After inversion:  {genome2[start_index-1]} -> {genome2[start_index]}")
-    
-    if end_index < len(genome1):
-        print(f"Before inversion: {genome1[end_index-1]} -> {genome1[end_index]}")
-        print(f"After inversion:  {genome2[end_index-1]} -> {genome2[end_index]}")
-
-# To use this verification, add this after your mutation:
-verify_mutation(genome1, genome2, start, end)
-# Call it
+# Draw the graph AFTER verifying
 draw_breakpoint_graph(small_genome1, small_genome2)
-
-
-
-
